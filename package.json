@@ -3,6 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "description": "Standalone M1 candle pipeline experiments. Code only: this repository never stores market data.",
-  "scripts": { "test": "node --test "test/*.test.js"" },
+  "scripts": { "test": "node --test \"test/*.test.js\"" },
   "engines": { "node": ">=20" }
 }
