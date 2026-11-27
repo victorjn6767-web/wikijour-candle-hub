@@ -73,7 +73,7 @@ async function fetchDay(id, y, m, d, stat, opt = {}) {
     if (v.ok) { r.rows = v.rows; return r; }
     bump(stat, via, 'invalid_' + v.reason); return { kind: 'retry' };
   };
-  for (let k = 0; k < (opt.directTries || 4); k++) {
+  for (let k = 0; k < (opt.directTries === undefined ? 4 : opt.directTries); k++) {
     try { const r = accept(await once(dayUrl(id, y, m, d), 'direct', stat), 'direct'); if (r.kind !== 'retry') return Object.assign(r, { via: 'direct' }); }
     catch (e) { bump(stat, 'direct', 'error'); }
     await sleep(opt.directWaitMs === undefined ? 1500 * Math.pow(2, k) : opt.directWaitMs);

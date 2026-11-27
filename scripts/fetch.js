@@ -21,6 +21,7 @@ const done = d => { const s = state.days[d]; if (!s) return false; if (s.kind ==
 const reqCount = () => { const o = { direct: 0, proxy: 0 }; for (const v of ['direct', 'proxy']) for (const [k, n] of Object.entries(state.stat[v] || {})) if (/^(http\d+|error)$/.test(k)) o[v] += n; return o; };
 const TODAY = process.env.DK_TODAY || new Date().toISOString().slice(0, 10), COOL = +(process.env.COOLDOWN_MS ?? 20000), PAUSE = +(process.env.DAY_PAUSE_MS ?? 800);
 const WAIT = process.env.DK_WAIT_MS === undefined ? {} : { directWaitMs: +process.env.DK_WAIT_MS, proxyWaitMs: +process.env.DK_WAIT_MS };
+if (process.env.DK_DIRECT_TRIES !== undefined) WAIT.directTries = +process.env.DK_DIRECT_TRIES; // test knob: 0 = proxy only
 const recent = d => Date.parse(TODAY + 'T00:00:00Z') - Date.parse(d + 'T00:00:00Z') < 2 * 864e5;
 const t0 = Date.now(); let fetched = 0; const reqStart = reqCount();
 const already = dates.filter(done).length;

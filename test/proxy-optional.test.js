@@ -73,3 +73,9 @@ test('upstream failures relayed by the Worker (HTTP 200 + x-upstream-status) are
   assert.deepStrictEqual(await dk.fetchDay('XAUUSD', 2026, 10, 14, stat, FAST), { kind: 'fail' });
   assert.strictEqual(stat.proxy.upstream503, 3); assert.strictEqual(stat.proxy.http200, 3); assert.strictEqual(stat.direct.upstream503, undefined);
 });
+test('directTries=0 skips direct and goes straight to the proxy (test knob for proxy-only statistics)', async () => {
+  process.env.DK_PROXY_URL = 'https://proxy.invalid'; const dk = load(), stat = {}, calls = [];
+  global.fetch = async u => { calls.push(String(u)); return resp(200, GOOD, { 'x-upstream-status': '200' }); };
+  const r = await dk.fetchDay('XAUUSD', 2026, 10, 14, stat, Object.assign({ directTries: 0 }, FAST));
+  assert.strictEqual(r.via, 'proxy'); assert.ok(calls.every(u => isProxy(u))); assert.strictEqual(stat.direct, undefined);
+});
