@@ -11,7 +11,7 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 90
     env:
       SYM: ${{ inputs.sym }}
       FROM: ${{ inputs.from }}
@@ -22,15 +22,38 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - name: unit tests
+      - name: unit and end-to-end tests
         run: node --test "test/*.test.js"
       - name: guard (code only, no data, no secrets)
         run: node scripts/guard.js
-      - name: fetch, invocation 1 (short budget on purpose)
-        run: BUDGET_SEC=240 PASSES=1 node scripts/fetch.js
-      - name: fetch, invocation 2 (must resume, not restart)
-        run: BUDGET_SEC=1500 PASSES=4 node scripts/fetch.js
-      - name: fetch, invocation 3 (retries leftovers)
-        run: BUDGET_SEC=600 PASSES=2 node scripts/fetch.js
+      - name: "1. first invocation: first half of the range only"
+        env: { TO: '2026-10-20', BUDGET_SEC: '1500', PASSES: '3' }
+        run: node scripts/fetch.js
+      - name: snapshot after invocation 1
+        run: node scripts/check-resume.js snapshot
+      - name: "2. second invocation: full range (must resume; complete days not requested again)"
+        env: { BUDGET_SEC: '2400', PASSES: '4' }
+        run: node scripts/fetch.js
+      - name: resume check (complete days untouched)
+        run: node scripts/check-resume.js compare
+      - name: snapshot after invocation 2
+        run: node scripts/check-resume.js snapshot
+      - name: damage three stored files (truncated, same-size flipped, deleted)
+        run: echo "TAMPERED=$(node scripts/tamper.js)" >> "$GITHUB_ENV"
+      - name: "3. third invocation: must detect and repair exactly those three days"
+        env: { BUDGET_SEC: '900', PASSES: '3' }
+        run: node scripts/fetch.js
+      - name: repair check (damaged days refetched, all others untouched)
+        run: node scripts/check-resume.js compare
+      - name: snapshot after invocation 3
+        run: node scripts/check-resume.js snapshot
+      - name: "4. fourth invocation: nothing to do, zero requests"
+        env: { BUDGET_SEC: '300', PASSES: '1', TAMPERED: '' }
+        run: node scripts/fetch.js
+      - name: idempotence check
+        env: { TAMPERED: '' }
+        run: node scripts/check-resume.js compare
       - name: analyze (aggregate statistics only)
         run: node scripts/analyze.js
+      - name: golden test of WJM1 v1 and independent reader
+        run: node --test test/v1-frozen.test.js test/ref-reader.test.js test/wjm1.test.js

@@ -52,3 +52,17 @@ test('404: old day is an empty day; a day within 2 days of today is pending, not
   assert.strictEqual(s.days['2026-10-05'].kind, 'none'); assert.strictEqual(s.days['2026-10-07'].kind, 'pending');
   const r = await run(F, env(S, w, { DK_TODAY: '2026-10-08' })); assert.match(r.out, /2 already complete/);
 });
+test('same-size corruption is detected through the stored hash and repaired; whole tamper cycle passes check-resume', async t => {
+  const S = await server().start(), w = tmp(); t.after(() => S.stop()); const e = extra => env(S, w, Object.assign({ FROM: '2026-10-05', TO: '2026-10-09' }, extra));
+  await run(F, e());
+  const snap = await new Promise(r => require('child_process').execFile(process.execPath, ['scripts/check-resume.js', 'snapshot'], { env: Object.assign({}, process.env, e()), cwd: path.join(__dirname, '..') }, (er, o) => r(o)));
+  assert.match(snap, /snapshot saved/);
+  const raw = path.join(w, 'raw', 'XAUUSD'), files = fs.readdirSync(raw).sort(); const size = fs.statSync(path.join(raw, files[1])).size;
+  const buf = fs.readFileSync(path.join(raw, files[1])); for (let i = 30; i < buf.length; i += 53) buf[i] ^= 0xff; fs.writeFileSync(path.join(raw, files[1]), buf); // same size, wrong content
+  assert.strictEqual(fs.statSync(path.join(raw, files[1])).size, size);
+  const tam = files[1].replace('.bi5', ''); const before = S.hits.direct[tam];
+  const r = await run(F, e()); assert.match(r.out, /4 already complete/); assert.strictEqual(S.hits.direct[tam], before + 1);
+  const c = await run('scripts/check-resume.js', e({ TAMPERED: tam })); assert.strictEqual(c.code, 0, c.out); assert.strictEqual(JSON.parse(c.out).pass, true);
+  const a = JSON.parse((await run(A, e())).out); assert.strictEqual(a.pass, true); assert.strictEqual(a.stored_files_integrity.complete_days_revalidated, 5); assert.deepStrictEqual(a.stored_files_integrity.orphan_or_partial_files, []);
+  assert.ok(Object.values(a.months).every(m => m.independent_v1_reader_matches === true));
+});

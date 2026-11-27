@@ -2,7 +2,9 @@
 // Decode the downloaded day files, validate, classify filler candles, check sessions/DST, measure encodings.
 // Prints aggregate statistics only (no candle values). Env: SYM, DKID, FROM, TO, DIGITS (default 3)
 const fs = require('fs'), path = require('path');
-const { lzmaDecode, parseDay } = require('../src/dukascopy');
+const { lzmaDecode, parseDay, validateDay } = require('../src/dukascopy');
+const { readV1 } = require('../test/ref-v1-reader');
+const crypto = require('crypto');
 const { encode, decode } = require('../src/wjm1');
 const SYM = process.env.SYM || 'XAUUSD', ID = process.env.DKID || SYM;
 if (!/^[A-Za-z0-9]+$/.test(ID)) { console.error('bad symbol id'); process.exit(2); }
@@ -60,11 +62,18 @@ for (const mo of months) {
   const mr = rows.filter(k => k.day.startsWith(mo)), mn = mr.filter(k => !filler(k));
   const e1 = encode(mr, DIGITS, 1), e1d = encode(mn, DIGITS, 1), e2 = encode(mn, DIGITS, 2);
   const same = (a, b) => a.length === b.length && a.every((k, i) => k.t === b[i].t && k.o === b[i].o && k.h === b[i].h && k.l === b[i].l && k.c === b[i].c && Math.fround(k.v) === b[i].v);
+  let g1 = false, ghdr = null; try { const gr = readV1(e1); ghdr = { version: gr.version, digits: gr.digits, count: gr.count }; g1 = gr.count === mr.length && same(mr, gr.rows) && gr.version === 1 && gr.digits === DIGITS; } catch (e) { g1 = false; }
   const r1 = same(mr, decode(e1).rows), r1d = same(mn, decode(e1d).rows), r2 = same(mn, decode(e2).rows);
-  allOk = allOk && r1 && r1d && (nq ? true : r2);
-  rep.months[mo] = { rows_all: mr.length, rows_without_filler: mn.length, source_bi5_bytes: rawBytes[mo] || 0, v1_all_rows_gz: e1.length, v1_without_filler_gz: e1d.length, v2_candidate_without_filler_gz: e2.length, roundtrip_v1_all: r1, roundtrip_v1_without_filler: r1d, roundtrip_v2_candidate: r2 };
+  allOk = allOk && r1 && r1d && g1 && (nq ? true : r2);
+  rep.months[mo] = { rows_all: mr.length, rows_without_filler: mn.length, source_bi5_bytes: rawBytes[mo] || 0, v1_all_rows_gz: e1.length, v1_without_filler_gz: e1d.length, v2_candidate_without_filler_gz: e2.length, roundtrip_v1_all: r1, independent_v1_reader_matches: g1, v1_header: ghdr, roundtrip_v1_without_filler: r1d, roundtrip_v2_candidate: r2 };
 }
 rep.all_roundtrips_ok = allOk;
+// every complete day must still revalidate from the stored file and match its recorded hash; no orphan files
+let revalid = 0, revalBad = [], orphans = [];
+for (const d of dates) { const s = state.days[d]; if (!s || s.kind !== 'ok') continue; const b = fs.readFileSync(path.join(RAW, d + '.bi5')); const [y, m, dd] = d.split('-').map(Number); const v = validateDay(b, y, m, dd); if (v.ok && b.length === s.bytes && crypto.createHash('sha256').update(b).digest('hex') === s.sha && v.rows === s.rows) revalid++; else revalBad.push(d); }
+for (const f of fs.readdirSync(RAW)) { const d = f.replace(/\.bi5.*$/, ''); if (!state.days[d] || state.days[d].kind !== 'ok' || !f.endsWith('.bi5')) orphans.push(f); }
+rep.stored_files_integrity = { complete_days_revalidated: revalid, failed_revalidation: revalBad, orphan_or_partial_files: orphans };
+if (revalBad.length || orphans.length) allOk = false;
 // fetch statistics, direct and proxy kept apart
 const bySrc = {}, tries = {}; for (const d of Object.keys(state.days)) { const s = state.days[d]; if (s.kind === 'ok') bySrc[s.via || '?'] = (bySrc[s.via || '?'] || 0) + 1; tries[s.tries] = (tries[s.tries] || 0) + 1; }
 rep.fetch = { direct: state.stat.direct || {}, proxy: state.stat.proxy || {}, complete_days_by_source: bySrc, days_by_number_of_fetch_attempts: tries, pending_days: Object.keys(state.days).filter(d => state.days[d].kind === 'pending'), failed_days_now: Object.keys(state.days).filter(d => state.days[d].kind === 'fail') };
