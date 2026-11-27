@@ -1,7 +1,7 @@
 'use strict';
 // The proxy is an optional fallback. These tests exercise the function level; test/fetch-resume.test.js covers whole runs.
 const test = require('node:test'), assert = require('node:assert');
-const { GOOD } = require('./helpers');
+const { GOOD, AMBIENT } = require('./helpers'); for (const k of AMBIENT) delete process.env[k]; // hermetic
 const FAST = { directWaitMs: 0, proxyWaitMs: 0 };
 const resp = (st, body, hdr) => ({ status: st, ok: st >= 200 && st < 300, headers: { get: k => (hdr || {})[k] || null }, arrayBuffer: async () => body });
 const load = () => { delete require.cache[require.resolve('../src/dukascopy')]; return require('../src/dukascopy'); };

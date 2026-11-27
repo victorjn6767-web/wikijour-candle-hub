@@ -1,5 +1,6 @@
 'use strict';
 const test = require('node:test'), assert = require('node:assert');
+const { AMBIENT } = require('./helpers'); for (const k of AMBIENT) delete process.env[k]; // hermetic
 const { parseDay, dayUrl } = require('../src/dukascopy');
 test('dayUrl uses a 0-based month', () => {
   assert.strictEqual(dayUrl('XAUUSD', 2026, 10, 14), 'https://datafeed.dukascopy.com/datafeed/XAUUSD/2026/09/14/BID_candles_min_1.bi5');

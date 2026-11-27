@@ -32,10 +32,13 @@ function server() {
   S.stop = () => new Promise(r => srv.close(r));
   return S;
 }
-function run(script, env) {
+const AMBIENT = ['DK_PROXY_URL', 'DK_BASE', 'DK_TODAY', 'DK_WAIT_MS', 'WORK_DIR', 'SYM', 'DKID', 'FROM', 'TO', 'DIGITS', 'BUDGET_SEC', 'PASSES', 'COOLDOWN_MS', 'DAY_PAUSE_MS', 'TAMPERED'];
+function run(script, env, args) {
   return new Promise(res => {
-    const c = cp.spawn(process.execPath, [script], { env: Object.assign({}, process.env, env), cwd: require('path').join(__dirname, '..') });
+    // Hermetic: never inherit pipeline settings (a real DK_PROXY_URL secret, dates, work dirs) from the surrounding environment.
+    const clean = Object.assign({}, process.env); for (const k of AMBIENT) delete clean[k];
+    const c = cp.spawn(process.execPath, [script].concat(args || []), { env: Object.assign(clean, env), cwd: require('path').join(__dirname, '..') });
     let out = ''; c.stdout.on('data', d => out += d); c.stderr.on('data', d => out += d); c.on('close', code => res({ code, out }));
   });
 }
-module.exports = { makeDay, GOOD, server, run };
+module.exports = { makeDay, GOOD, server, run, AMBIENT };

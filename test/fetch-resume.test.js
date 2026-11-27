@@ -55,7 +55,7 @@ test('404: old day is an empty day; a day within 2 days of today is pending, not
 test('same-size corruption is detected through the stored hash and repaired; whole tamper cycle passes check-resume', async t => {
   const S = await server().start(), w = tmp(); t.after(() => S.stop()); const e = extra => env(S, w, Object.assign({ FROM: '2026-10-05', TO: '2026-10-09' }, extra));
   await run(F, e());
-  const snap = await new Promise(r => require('child_process').execFile(process.execPath, ['scripts/check-resume.js', 'snapshot'], { env: Object.assign({}, process.env, e()), cwd: path.join(__dirname, '..') }, (er, o) => r(o)));
+  const snap = (await run('scripts/check-resume.js', Object.assign(e(), {}), ['snapshot'])).out;
   assert.match(snap, /snapshot saved/);
   const raw = path.join(w, 'raw', 'XAUUSD'), files = fs.readdirSync(raw).sort(); const size = fs.statSync(path.join(raw, files[1])).size;
   const buf = fs.readFileSync(path.join(raw, files[1])); for (let i = 30; i < buf.length; i += 53) buf[i] ^= 0xff; fs.writeFileSync(path.join(raw, files[1]), buf); // same size, wrong content
