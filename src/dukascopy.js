@@ -27,6 +27,7 @@ function parseDay(raw, dayStartSec) {
   return rows;
 }
 
+let proxyDown = 0; const PROXY_MAX_FAILS = 3;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const bump = (s, k) => { s[k] = (s[k] || 0) + 1; };
 
@@ -46,20 +47,22 @@ async function once(url, via, stat) {
 // Direct first (backoff), then an optional pass-through proxy given by env DK_PROXY_URL (a repository secret).
 // Returns {kind:'ok',buf,via} | {kind:'none'} | {kind:'fail'}. Never logs the proxy address.
 async function fetchDay(id, y, m, d, stat, opt = {}) {
-  const proxy = process.env.DK_PROXY_URL || '';
+  const proxy = proxyDown >= PROXY_MAX_FAILS ? '' : (process.env.DK_PROXY_URL || '');
   for (let k = 0; k < (opt.directTries || 4); k++) {
     try { const r = await once(dayUrl(id, y, m, d), 'direct', stat); if (r.kind !== 'retry') return Object.assign(r, { via: 'direct' }); }
     catch (e) { bump(stat, 'direct:err'); }
-    await sleep(1500 * Math.pow(2, k));
+    await sleep(opt.directWaitMs === undefined ? 1500 * Math.pow(2, k) : opt.directWaitMs);
   }
   if (proxy) {
     for (let k = 0; k < 3; k++) {
-      try { const r = await once(`${proxy}/raw?i=${id}&tf=m1&side=bid&y=${y}&m=${m}&d=${d}`, 'proxy', stat); if (r.kind !== 'retry') return Object.assign(r, { via: 'proxy' }); }
+      try { const r = await once(`${proxy}/raw?i=${id}&tf=m1&side=bid&y=${y}&m=${m}&d=${d}`, 'proxy', stat); if (r.kind !== 'retry') { proxyDown = 0; return Object.assign(r, { via: 'proxy' }); } }
       catch (e) { bump(stat, 'proxy:err'); }
-      await sleep(1500 * (k + 1));
+      await sleep(opt.proxyWaitMs === undefined ? 1500 * (k + 1) : opt.proxyWaitMs);
     }
+    proxyDown++; // circuit breaker: after PROXY_MAX_FAILS days with a dead proxy, stop trying it
+    if (proxyDown === PROXY_MAX_FAILS) bump(stat, 'proxy:disabled');
   }
   return { kind: 'fail' };
 }
 
-module.exports = { dayUrl, lzmaDecode, parseDay, fetchDay };
+module.exports = { dayUrl, lzmaDecode, parseDay, fetchDay, _resetProxy: () => { proxyDown = 0; } };
