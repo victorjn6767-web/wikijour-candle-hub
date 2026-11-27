@@ -8,7 +8,7 @@ const SYM = process.env.SYM || 'XAUUSD', ID = process.env.DKID || SYM;
 if (!/^[A-Za-z0-9]+$/.test(ID)) { console.error('bad symbol id'); process.exit(2); }
 const DIGITS = +(process.env.DIGITS || 3);
 const FROM = process.env.FROM, TO = process.env.TO;
-const WORK = path.join(__dirname, '..', 'work'), RAW = path.join(WORK, 'raw', ID), STATE = path.join(WORK, `state-${ID}.json`);
+const WORK = process.env.WORK_DIR || path.join(__dirname, '..', 'work'), RAW = path.join(WORK, 'raw', ID), STATE = path.join(WORK, `state-${ID}.json`);
 const state = JSON.parse(fs.readFileSync(STATE, 'utf8'));
 const iso = t => new Date(t * 1000).toISOString().slice(0, 16) + 'Z';
 const hm = t => new Date(t * 1000).toISOString().slice(11, 16);
@@ -65,5 +65,8 @@ for (const mo of months) {
   rep.months[mo] = { rows_all: mr.length, rows_without_filler: mn.length, source_bi5_bytes: rawBytes[mo] || 0, v1_all_rows_gz: e1.length, v1_without_filler_gz: e1d.length, v2_candidate_without_filler_gz: e2.length, roundtrip_v1_all: r1, roundtrip_v1_without_filler: r1d, roundtrip_v2_candidate: r2 };
 }
 rep.all_roundtrips_ok = allOk;
+// fetch statistics, direct and proxy kept apart
+const bySrc = {}, tries = {}; for (const d of Object.keys(state.days)) { const s = state.days[d]; if (s.kind === 'ok') bySrc[s.via || '?'] = (bySrc[s.via || '?'] || 0) + 1; tries[s.tries] = (tries[s.tries] || 0) + 1; }
+rep.fetch = { direct: state.stat.direct || {}, proxy: state.stat.proxy || {}, complete_days_by_source: bySrc, days_by_number_of_fetch_attempts: tries, pending_days: Object.keys(state.days).filter(d => state.days[d].kind === 'pending'), failed_days_now: Object.keys(state.days).filter(d => state.days[d].kind === 'fail') };
 rep.pass = dup === 0 && off === 0 && outDay === 0 && ohlc === 0 && nonpos === 0 && allOk && badDay === 0;
 console.log(JSON.stringify(rep, null, 1));
