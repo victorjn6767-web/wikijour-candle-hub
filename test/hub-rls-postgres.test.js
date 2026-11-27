@@ -4,8 +4,10 @@
 // This proves the SQL means what the declaration says. It does NOT prove the real Supabase Storage API behaves identically.
 const test = require('node:test'), assert = require('node:assert'), cp = require('child_process'), fs = require('fs'), os = require('os'), path = require('path');
 const P = require('../src/hub/policies');
-const bin = ['/usr/lib/postgresql/16/bin', '/usr/lib/postgresql/17/bin', '/usr/lib/postgresql/15/bin', '/usr/lib/postgresql/14/bin'].find(d => fs.existsSync(d + '/initdb'));
-const skip = !bin && 'PostgreSQL binaries not found: RLS test skipped (CI must provide them)';
+const root = '/usr/lib/postgresql', vers = fs.existsSync(root) ? fs.readdirSync(root).sort((a, b) => b - a) : [];
+const bin = vers.map(v => `${root}/${v}/bin`).find(d => fs.existsSync(d + '/initdb'));
+// In CI (REQUIRE_PG=1) a missing PostgreSQL is a FAILURE, never a silent skip.
+const skip = !bin && !process.env.REQUIRE_PG && 'PostgreSQL binaries not found: RLS test skipped (set REQUIRE_PG=1 to make this a failure)';
 const asPg = process.getuid && process.getuid() === 0;
 function sh(cmd, args, opt = {}) { const c = asPg ? ['runuser', ['-u', 'postgres', '--', cmd, ...args]] : [cmd, args]; return cp.spawnSync(c[0], c[1], Object.assign({ encoding: 'utf8' }, opt)); }
 const SETUP = `
@@ -19,6 +21,7 @@ const ROLES = { hub_writer: ['authenticated', { role: 'authenticated', app_metad
   norole: ['authenticated', { role: 'authenticated', app_metadata: {} }], usermeta: ['authenticated', { role: 'authenticated', app_metadata: {}, user_metadata: { hub_role: 'hub_writer' } }], anon: ['anon', { role: 'anon' }] };
 const NAMES = { hub: ['manifest.json', 'manifest.sig', 'fx/XAUUSD/2026-10.v1.m1.gz', 'fx/XAUUSD/2026-10.v12.m1.gz', 'fx/xauusd/2026-10.v1.m1.gz', 'evil.txt', 'manifest.json/x', 'raw/XAUUSD/2026/10/12.0123456789abcdef.bi5', 'state/XAUUSD.json'],
   'hub-raw': ['raw/XAUUSD/2026/10/12.0123456789abcdef.bi5', 'raw/XAUUSD/2026/10/12.bi5', 'state/XAUUSD.json', 'candidate/manifest.json', 'manifest.json', 'fx/XAUUSD/2026-10.v1.m1.gz', 'candidate/manifest.json.bak'], other: ['manifest.json'] };
+test('PostgreSQL is available when required', () => { if (process.env.REQUIRE_PG) assert.ok(bin, 'REQUIRE_PG=1 but no PostgreSQL binaries found'); });
 test('SQL policies behave exactly like the declaration for every role, operation, bucket and name (real PostgreSQL RLS)', { skip, timeout: 120000 }, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hubpg-')); if (asPg) fs.chmodSync(dir, 0o777);
   const data = path.join(dir, 'd'), sock = dir; let started = false;
