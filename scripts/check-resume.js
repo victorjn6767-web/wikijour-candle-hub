@@ -2,7 +2,7 @@
 // CI helper. `snapshot` copies the state file; `compare` checks what happened since: complete days must not have been requested
 // again (per-day request counters unchanged), except the days listed in TAMPERED which must have been fetched again and be complete.
 const fs = require('fs'), path = require('path');
-const ID = process.env.DKID || process.env.SYM || 'XAUUSD';
+const ID = process.env.DKID || process.env.SYM || 'XAUUSD'; if (!/^[A-Za-z0-9]+$/.test(ID)) { console.error('bad symbol id'); process.exit(2); };
 const WORK = process.env.WORK_DIR || path.join(__dirname, '..', 'work'), STATE = path.join(WORK, `state-${ID}.json`), SNAP = path.join(WORK, `snap-${ID}.json`);
 if (process.argv[2] === 'snapshot') { fs.copyFileSync(STATE, SNAP); console.log('snapshot saved'); process.exit(0); }
 const a = JSON.parse(fs.readFileSync(SNAP, 'utf8')), b = JSON.parse(fs.readFileSync(STATE, 'utf8')), tam = new Set((process.env.TAMPERED || '').split(',').filter(Boolean));
