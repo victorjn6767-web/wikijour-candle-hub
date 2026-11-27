@@ -1,0 +1,12 @@
+# Never commit market data or secrets
+work/
+out/
+*.bi5
+*.m1
+*.m1.gz
+*.m2.gz
+*.zip
+*.csv
+*.env
+.env*
+node_modules/

@@ -1,0 +1,36 @@
+name: exp0
+on:
+  workflow_dispatch:
+    inputs:
+      sym: { description: 'Symbol label', default: 'XAUUSD' }
+      from: { description: 'First UTC date YYYY-MM-DD', default: '2026-10-01' }
+      to: { description: 'Last UTC date YYYY-MM-DD', default: '2026-11-10' }
+      digits: { description: 'Price decimals', default: '3' }
+permissions:
+  contents: read
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      SYM: ${{ inputs.sym }}
+      FROM: ${{ inputs.from }}
+      TO: ${{ inputs.to }}
+      DIGITS: ${{ inputs.digits }}
+      DK_PROXY_URL: ${{ secrets.DK_PROXY_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: unit tests
+        run: node --test "test/*.test.js"
+      - name: guard (code only, no data, no secrets)
+        run: node scripts/guard.js
+      - name: fetch, invocation 1 (short budget on purpose)
+        run: BUDGET_SEC=240 PASSES=1 node scripts/fetch.js
+      - name: fetch, invocation 2 (must resume, not restart)
+        run: BUDGET_SEC=1500 PASSES=4 node scripts/fetch.js
+      - name: fetch, invocation 3 (retries leftovers)
+        run: BUDGET_SEC=600 PASSES=2 node scripts/fetch.js
+      - name: analyze (aggregate statistics only)
+        run: node scripts/analyze.js
