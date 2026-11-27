@@ -67,3 +67,9 @@ test('validateDay rejects bad times and bad OHLC', () => {
   [[0, 100, 104, 98, 110], [60, 100, 90, 95, 99]].forEach((r, i) => r.forEach((x, j) => b.writeUInt32BE(x, i * 24 + j * 4))); // 2nd row: close 90 below low 95
   const bad = cp.spawnSync('xz', ['--format=lzma', '-zc'], { input: b }).stdout; assert.deepStrictEqual(validateDay(bad, 2026, 10, 14), { ok: false, reason: 'ohlc' });
 });
+test('upstream failures relayed by the Worker (HTTP 200 + x-upstream-status) are counted under proxy, separately from direct', async () => {
+  process.env.DK_PROXY_URL = 'https://proxy.invalid'; const dk = load(), stat = {};
+  global.fetch = async u => (isProxy(String(u)) ? resp(200, Buffer.alloc(0), { 'x-upstream-status': '503' }) : resp(503, Buffer.alloc(0)));
+  assert.deepStrictEqual(await dk.fetchDay('XAUUSD', 2026, 10, 14, stat, FAST), { kind: 'fail' });
+  assert.strictEqual(stat.proxy.upstream503, 3); assert.strictEqual(stat.proxy.http200, 3); assert.strictEqual(stat.direct.upstream503, undefined);
+});

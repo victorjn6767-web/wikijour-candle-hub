@@ -58,6 +58,7 @@ async function once(url, via, stat) {
   }
   // proxy: only an explicit upstream 404 means "no file"; anything odd is a retry, never an authoritative empty day
   const up = r.headers.get('x-upstream-status');
+  if (up && up !== '200') bump(stat, 'proxy', 'upstream' + up); // the Worker relays upstream failures as HTTP 200 plus this header
   if (up === '404') return { kind: 'none' };
   if (!r.ok || (up && up !== '200')) return { kind: 'retry' };
   const buf = Buffer.from(await r.arrayBuffer());
