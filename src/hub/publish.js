@@ -55,14 +55,20 @@ class Publisher {
     const bytes = encode(rows, this.digits, 1);
     return { complete: true, bytes, rows: rows.length, firstMin: rows.length ? (rows[0].t - EPOCH) / 60 : 0, lastMin: rows.length ? (rows[rows.length - 1].t - EPOCH) / 60 : 0 };
   }
-  async candidate() { const b = await this.s.get('hub-raw', CAND); return b ? parse(b) : { schema: 1, seq: 1, generated: new Date(0).toISOString(), symbols: {} }; }
+  async candidate() { if (!this._cand) { const b = await this.s.get('hub-raw', CAND); this._cand = b ? parse(b) : { schema: 1, seq: 1, generated: new Date(0).toISOString(), symbols: {} }; } return this._cand; }   // read ONCE per run: never re-read what this run just wrote
   // Upload a built month as a new immutable version (skipped when identical to the current one) and record it in the candidate manifest.
   async publishMonth(month, built) {
     const cand = await this.candidate(), s = cand.symbols[this.sym] || (cand.symbols[this.sym] = { side: 'bid', digits: this.digits, months: {} }), prev = s.months[month], sha = sha256(built.bytes);
     if (prev && prev.sha256 === sha) return { changed: false, v: prev.v };
-    const v = prev ? prev.v + 1 : 1;
     if (built.bytes.length > LIM.file) throw new Error('month file too large');
-    await this.s.put('hub', monthPath(this.sym, month, v), built.bytes);
+    let v = prev ? prev.v + 1 : 1;
+    for (let tries = 0; ; tries++) {
+      try { await this.s.put('hub', monthPath(this.sym, month, v), built.bytes); break; }
+      catch (e) {
+        if (e.status !== 409 || tries >= 5) throw e;                                      // name taken: if it already holds exactly these bytes (an earlier run uploaded it but its manifest entry was lost) adopt it, else try the next version
+        const have = await this.s.get('hub', monthPath(this.sym, month, v), LIM.file); if (have && sha256(have) === sha) break; v++;
+      }
+    }
     const back = await this.s.get('hub', monthPath(this.sym, month, v), LIM.file); if (!back || sha256(back) !== sha) throw new Error('read-back verification failed');
     s.months[month] = { v, bytes: built.bytes.length, sha256: sha, rows: built.rows, firstMin: built.firstMin, lastMin: built.lastMin };
     await this.s.put('hub-raw', CAND, serialize(cand), { upsert: true }); return { changed: true, v };

@@ -85,3 +85,18 @@ test('no secret ever reaches stored objects or the mock log', async () => {
   for (const B of Object.values(E.S.buckets)) for (const v of B.values()) assert.ok(!v.toString('latin1').includes('PRIVATE KEY') && !v.toString('latin1').includes('pw-writer'));
   assert.ok(E.S.log.every(l => l.role === 'hub_writer' || l.role === 'hub_reader'), 'only the two dedicated identities were used');
 });
+test('lost candidate entry (month file uploaded earlier, manifest entry missing): the identical file is adopted, no new version is created', async () => {
+  const E = await env(); await E.run(); E.S.buckets['hub-raw'].delete('candidate/manifest.json');       // simulate the lost-update situation seen on the real project
+  const r = await E.run(E.pub()); assert.ok(r.pubd.changed && r.pubd.v === 1, 'adopted as v1'); assert.deepStrictEqual([...E.S.buckets.hub.keys()].filter(k => k.startsWith('fx/')), ['fx/XAUUSD/2026-10.v1.m1.gz']);
+  assert.deepStrictEqual(await finalize({ store: E.W, privatePem: KEYS.privatePem }), { seq: 1 }); assert.ok(await E.reader().month('XAUUSD', '2026-10'));
+});
+test('name taken by DIFFERENT bytes: the next version is used and the old file is left untouched', async () => {
+  const E = await env(); await E.run(); E.S.buckets['hub-raw'].delete('candidate/manifest.json'); const old = Buffer.from('not the real month'); E.S.buckets.hub.set('fx/XAUUSD/2026-10.v1.m1.gz', old);
+  const r = await E.run(E.pub()); assert.ok(r.pubd.changed && r.pubd.v === 2); assert.strictEqual(E.S.buckets.hub.get('fx/XAUUSD/2026-10.v1.m1.gz').toString(), 'not the real month');
+});
+test('candidate is read once per run: a stale re-read cannot drop months published earlier in the same run', async () => {
+  const E = await env(); const p = E.pub(); await p.syncDays(dates, E.fetchDay); const b = await p.buildMonth('2026-10'); await p.publishMonth('2026-10', b);
+  const real = E.W.get.bind(E.W); let reads = 0; E.W.get = async (bk, path, max) => { if (path === 'candidate/manifest.json') { reads++; return null; } return real(bk, path, max); };   // storage keeps answering "missing/stale"
+  const b2 = Object.assign({}, b, { bytes: Buffer.concat([b.bytes, Buffer.alloc(0)]) }); await p.publishMonth('2026-10', b2); assert.strictEqual(reads, 0, 'no re-read after the first load');
+  E.W.get = real; const c = await p.candidate(); assert.ok(c.symbols.XAUUSD.months['2026-10']);
+});
