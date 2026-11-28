@@ -25,6 +25,7 @@ function mock() {
       if (kind === 'public') return send(res, 400, { statusCode: '404', error: 'Bucket not found' });          // private buckets: no public URLs
       const tok = (req.headers.authorization || '').replace(/^Bearer /, ''); if (req.headers.apikey !== S.anon) return send(res, 401, { error: 'bad apikey' });
       const c = tok === S.anon ? { role: 'anon' } : unjwt(tok); if (!c) return send(res, 401, { error: 'bad token' }); if (c === 'expired') return send(res, 401, { error: 'expired' });
+      if (S.force) return send(res, S.force, { error: 'forced' });                                    // test knob: every storage call fails with this status
       const role = c.role === 'authenticated' ? (c.app_metadata || {}).hub_role || '' : '__anon';       // user_metadata is deliberately ignored
       const B = S.buckets[bucket]; const deny = (op, why) => { S.log.push({ op, bucket, name, role, result: 'deny' }); return send(res, 403, { statusCode: '403', error: 'Unauthorized', message: why || 'new row violates row-level security policy' }); };
       const ok = (op) => S.log.push({ op, bucket, name, role, result: 'allow' });

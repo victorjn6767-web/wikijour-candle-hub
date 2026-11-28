@@ -24,3 +24,11 @@ Dukascopy publishes market data under its own terms; check them before redistrib
 - A day counts as complete only if the file decodes and every candle passes sanity checks (grid, day bounds, OHLC, volume); HTTP 200 alone is not enough, and a tiny or empty proxy answer is never treated as "no data".
 - The proxy circuit breaker lives in one process only (3 consecutive days with a dead proxy); the next step or run starts with the proxy enabled again.
 - Direct and proxy statistics are reported separately.
+
+## Hub publishing (stage 2, not yet run)
+Two manual workflows, both read-only for the repository token, actions pinned by SHA:
+- `hub-upload` (environment `hub-prod`): download → validated raw days in the private bucket `hub-raw` → immutable month versions in `hub` → **candidate** manifest. No signing key.
+- `hub-sign` (environment `hub-sign`, required reviewer recommended): signs the candidate with Ed25519 and verifies the result exactly like the app.
+
+Environment secrets: `HUB_WRITER_EMAIL`, `HUB_WRITER_PASSWORD` (both environments), `HUB_SIGNING_KEY` (only `hub-sign`; create with `node scripts/hub-keygen.js <file outside the repo>`), optional `DK_PROXY_URL` (`hub-prod`). Environment variables (not secret): `HUB_URL`, `HUB_HOST` (the single allowed host), `HUB_ANON_KEY` (publishable key). No Service Role key anywhere; reader credentials exist only in the server-side Worker and on the owner's machine for `scripts/hub-selfcheck.js`.
+While testing from a branch, the environments' deployment-branch rule must allow that branch; restrict to `main` afterwards. The public key goes into `keys/trusted.json`.

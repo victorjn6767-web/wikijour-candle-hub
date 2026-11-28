@@ -1,0 +1,42 @@
+name: hub-upload
+# Upload job: raw days -> private Storage, immutable month versions, CANDIDATE manifest. Holds NO signing key and NO Service Role key.
+# Manual only. Needs the GitHub Environment `hub-prod` (secrets HUB_WRITER_EMAIL, HUB_WRITER_PASSWORD; variables HUB_URL, HUB_HOST, HUB_ANON_KEY).
+on:
+  workflow_dispatch:
+    inputs:
+      sym: { description: 'Hub symbol (A-Z0-9)', default: 'XAUUSD' }
+      dkid: { description: 'Dukascopy id', default: 'XAUUSD' }
+      from: { description: 'First UTC date YYYY-MM-DD', default: '2026-10-01' }
+      to: { description: 'Last UTC date YYYY-MM-DD', default: '2026-11-10' }
+      digits: { description: 'Price decimals', default: '3' }
+permissions:
+  contents: read
+concurrency:
+  group: hub-publish
+  cancel-in-progress: false
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: hub-prod
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22 }
+      - name: guard (code only, no data, no secret-like strings)
+        run: node scripts/guard.js
+      - name: upload
+        run: node scripts/hub-upload.js
+        env:
+          SYM: ${{ inputs.sym }}
+          DKID: ${{ inputs.dkid }}
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to }}
+          DIGITS: ${{ inputs.digits }}
+          HUB_URL: ${{ vars.HUB_URL }}
+          HUB_HOST: ${{ vars.HUB_HOST }}
+          HUB_ANON_KEY: ${{ vars.HUB_ANON_KEY }}
+          HUB_WRITER_EMAIL: ${{ secrets.HUB_WRITER_EMAIL }}
+          HUB_WRITER_PASSWORD: ${{ secrets.HUB_WRITER_PASSWORD }}
+          DK_PROXY_URL: ${{ secrets.DK_PROXY_URL }}

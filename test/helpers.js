@@ -32,7 +32,7 @@ function server() {
   S.stop = () => new Promise(r => srv.close(r));
   return S;
 }
-const AMBIENT = ['DK_PROXY_URL', 'DK_BASE', 'DK_TODAY', 'DK_WAIT_MS', 'WORK_DIR', 'SYM', 'DKID', 'FROM', 'TO', 'DIGITS', 'BUDGET_SEC', 'PASSES', 'COOLDOWN_MS', 'DAY_PAUSE_MS', 'TAMPERED'];
+const AMBIENT = ['DK_PROXY_URL', 'DK_BASE', 'DK_TODAY', 'DK_WAIT_MS', 'WORK_DIR', 'SYM', 'DKID', 'FROM', 'TO', 'DIGITS', 'BUDGET_SEC', 'PASSES', 'COOLDOWN_MS', 'DAY_PAUSE_MS', 'TAMPERED', 'DK_DIRECT_TRIES', 'HUB_URL', 'HUB_HOST', 'HUB_ANON_KEY', 'HUB_WRITER_EMAIL', 'HUB_WRITER_PASSWORD', 'HUB_READER_EMAIL', 'HUB_READER_PASSWORD', 'HUB_SIGNING_KEY', 'HUB_SELFCHECK_WRITE', 'HUB_ALLOW_LOOPBACK', 'HUB_TRUSTED_FILE'];
 function run(script, env, args) {
   return new Promise(res => {
     // Hermetic: never inherit pipeline settings (a real DK_PROXY_URL secret, dates, work dirs) from the surrounding environment.
