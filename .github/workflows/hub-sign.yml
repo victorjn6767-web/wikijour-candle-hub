@@ -1,0 +1,30 @@
+name: hub-sign
+# Sign job: promotes the candidate manifest to the signed manifest and verifies it the way the app will.
+# Manual only. GitHub Environment `hub-sign` (Required reviewer recommended): secret HUB_SIGNING_KEY (Ed25519, from scripts/hub-keygen.js),
+# HUB_WRITER_EMAIL, HUB_WRITER_PASSWORD; variables HUB_URL, HUB_HOST, HUB_ANON_KEY. The public key lives in keys/trusted.json.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: hub-publish
+  cancel-in-progress: false
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: hub-sign
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22 }
+      - name: sign and verify
+        run: node scripts/hub-sign.js
+        env:
+          HUB_URL: ${{ vars.HUB_URL }}
+          HUB_HOST: ${{ vars.HUB_HOST }}
+          HUB_ANON_KEY: ${{ vars.HUB_ANON_KEY }}
+          HUB_WRITER_EMAIL: ${{ secrets.HUB_WRITER_EMAIL }}
+          HUB_WRITER_PASSWORD: ${{ secrets.HUB_WRITER_PASSWORD }}
+          HUB_SIGNING_KEY: ${{ secrets.HUB_SIGNING_KEY }}
