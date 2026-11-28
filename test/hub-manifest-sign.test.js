@@ -78,3 +78,10 @@ test('reader: validly signed but internally wrong data is still rejected (rows, 
   for (const [name, mut] of Object.entries(cases)) { const gz = mk(mut); await assert.rejects(rdr(fileset(5, gz)).month('XAUUSD', '2026-10'), /invalid|mismatch/, name); }
   await assert.rejects(rdr(fileset(5, month(100).gz, 120)).month('XAUUSD', '2026-10'), /mismatch|count/, 'row count differs from manifest');
 });
+test('keys/trusted.json: every entry is an Ed25519 PUBLIC key whose id matches the file (the key the app and the sign job pin)', () => {
+  const t = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'keys', 'trusted.json'), 'utf8'));
+  for (const [id, pem] of Object.entries(t)) {
+    assert.match(id, /^[0-9a-f]{16}$/); assert.ok(!/PRIVATE/.test(pem), 'a private key must never be in this file');
+    const k = crypto.createPublicKey(pem); assert.strictEqual(k.asymmetricKeyType, 'ed25519'); assert.strictEqual(keyId(pem), id);
+  }
+});
