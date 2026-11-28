@@ -27,14 +27,16 @@ class Store {
     if (r.status === 401 && retry) { this.token = null; return this.req(method, url, extra, false); }
     return r;
   }
-  async fail(r, what) { let t = ''; try { t = (await r.text()).slice(0, 200); } catch (e) { /* ignore */ } throw new HubError(this.scrub(`${what} failed (${r.status}) ${t}`), r.status); }
+  // Supabase Storage reports many errors as HTTP 400 with the real code in the JSON body ({"statusCode":"404",...}); normalise to that code.
+  async eff(r) { if (r.status !== 400) return r.status; try { const sc = +(JSON.parse(await r.clone().text()).statusCode); if (sc >= 400 && sc < 600) return sc; } catch (e) { /* not JSON */ } return r.status; }
+  async fail(r, what) { const st = await this.eff(r); let t = ''; try { t = (await r.text()).slice(0, 200); } catch (e) { /* ignore */ } throw new HubError(this.scrub(`${what} failed (${st}) ${t}`), st); }
   async put(bucket, path, bytes, { upsert = false } = {}) {
     const r = await this.req('POST', `${this.base}/storage/v1/object/${bucket}/${enc(path)}`, { headers: { 'content-type': 'application/octet-stream', 'x-upsert': upsert ? 'true' : 'false' }, body: bytes });
     if (!r.ok) await this.fail(r, `put ${bucket}/${path}`); await r.arrayBuffer(); return true;
   }
   async get(bucket, path, maxBytes = 1 << 20) {
     const r = await this.req('GET', `${this.base}/storage/v1/object/authenticated/${bucket}/${enc(path)}`);
-    if (r.status === 404) { await r.arrayBuffer(); return null; }
+    if ((await this.eff(r)) === 404) { await r.arrayBuffer(); return null; }
     if (!r.ok) await this.fail(r, `get ${bucket}/${path}`);
     const len = +(r.headers.get('content-length') || 0); if (len > maxBytes) { await r.arrayBuffer().catch(() => {}); throw new HubError('object too large', 0); }
     const b = Buffer.from(await r.arrayBuffer()); if (b.length > maxBytes) throw new HubError('object too large', 0); return b;

@@ -10,7 +10,7 @@ function mock() {
   const unjwt = t => { const [h, p, s] = String(t).split('.'); if (!s || crypto.createHmac('sha256', S.secret).update(h + '.' + p).digest('base64url') !== s) return null; const c = JSON.parse(Buffer.from(p, 'base64url')); return c.exp && c.exp < Date.now() / 1e3 ? 'expired' : c; };
   S.anon = jwt({ role: 'anon' });
   S.addUser = (email, password, hubRole, extra) => { S.users[email] = { password, claims: Object.assign({ role: 'authenticated', sub: crypto.randomUUID(), app_metadata: hubRole ? { hub_role: hubRole } : {} }, extra || {}) }; };
-  const send = (res, code, body, h) => { res.writeHead(code, Object.assign({ 'content-type': typeof body === 'string' || Buffer.isBuffer(body) ? 'application/octet-stream' : 'application/json' }, h)); res.end(typeof body === 'object' && !Buffer.isBuffer(body) ? JSON.stringify(body) : body); };
+  const send = (res, code, body, h) => { if (body && typeof body === 'object' && !Buffer.isBuffer(body) && (body.statusCode === '404' || body.statusCode === '409')) code = 400; /* real Supabase Storage answers 400 + statusCode in the body */ res.writeHead(code, Object.assign({ 'content-type': typeof body === 'string' || Buffer.isBuffer(body) ? 'application/octet-stream' : 'application/json' }, h)); res.end(typeof body === 'object' && !Buffer.isBuffer(body) ? JSON.stringify(body) : body); };
   const srv = http.createServer((req, res) => {
     const chunks = []; req.on('data', c => chunks.push(c)); req.on('end', () => {
       const body = Buffer.concat(chunks), u = new URL(req.url, 'http://x'), p = decodeURIComponent(u.pathname);
