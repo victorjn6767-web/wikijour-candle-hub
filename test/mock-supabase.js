@@ -5,7 +5,7 @@ const http = require('http'), crypto = require('crypto');
 const { allowed } = require('../src/hub/policies');
 const b64 = o => Buffer.from(typeof o === 'string' ? o : JSON.stringify(o)).toString('base64url');
 function mock() {
-  const S = { secret: crypto.randomBytes(16).toString('hex'), anon: null, users: {}, buckets: { hub: new Map(), 'hub-raw': new Map() }, log: [], failPuts: 0, ttl: 3600, logins: 0 };
+  const S = { secret: crypto.randomBytes(16).toString('hex'), anon: null, users: {}, buckets: { hub: new Map(), 'hub-raw': new Map() }, log: [], failPuts: 0, prev: {}, stale: false, ttl: 3600, logins: 0 };
   const jwt = c => { const h = b64({ alg: 'HS256', typ: 'JWT' }), p = b64(c); return `${h}.${p}.${crypto.createHmac('sha256', S.secret).update(h + '.' + p).digest('base64url')}`; };
   const unjwt = t => { const [h, p, s] = String(t).split('.'); if (!s || crypto.createHmac('sha256', S.secret).update(h + '.' + p).digest('base64url') !== s) return null; const c = JSON.parse(Buffer.from(p, 'base64url')); return c.exp && c.exp < Date.now() / 1e3 ? 'expired' : c; };
   S.anon = jwt({ role: 'anon' });
@@ -36,6 +36,7 @@ function mock() {
         // folder listing: Supabase returns sub-folders as entries without metadata; emulate for completeness
         ok('LIST'); return send(res, 200, out);
       }
+      if (req.method === 'GET' && S.stale && !/[?&]t=\d+/.test(req.url) && (S.prev[bucket + '/' + name])) return send(res, 200, S.prev[bucket + '/' + name]);   // test knob: stale copy after an overwrite unless the caller cache-busts
       if (req.method === 'GET') { if (!allowed('SELECT', bucket, name, role)) { S.log.push({ op: 'SELECT', bucket, name, role, result: 'deny' }); return send(res, 404, { statusCode: '404', error: 'not_found', message: 'Object not found' }); } ok('SELECT'); const v = B.get(name); if (!v) return send(res, 404, { statusCode: '404', error: 'not_found' }); return send(res, 200, v); }
       if (req.method === 'POST') {
         const up = req.headers['x-upsert'] === 'true', exists = B.has(name);
@@ -43,7 +44,7 @@ function mock() {
         if (exists && !up) { ok('INSERT'); return send(res, 409, { statusCode: '409', error: 'Duplicate', message: 'The resource already exists' }); }
         if (exists && up && !(allowed('UPDATE', bucket, name, role) && allowed('SELECT', bucket, name, role))) return deny('UPDATE');
         if (S.failPuts > 0) { S.failPuts--; req.socket.destroy(); return; }
-        B.set(name, Buffer.from(body)); ok(exists ? 'UPDATE' : 'INSERT'); return send(res, 200, { Key: bucket + '/' + name });
+        if (exists) S.prev[bucket + '/' + name] = B.get(name); B.set(name, Buffer.from(body)); ok(exists ? 'UPDATE' : 'INSERT'); return send(res, 200, { Key: bucket + '/' + name });
       }
       if (req.method === 'DELETE') { if (!allowed('DELETE', bucket, name, role)) return deny('DELETE'); B.delete(name); ok('DELETE'); return send(res, 200, {}); }
       send(res, 405, {});

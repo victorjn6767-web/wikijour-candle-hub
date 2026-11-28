@@ -35,7 +35,7 @@ class Store {
     if (!r.ok) await this.fail(r, `put ${bucket}/${path}`); await r.arrayBuffer(); return true;
   }
   async get(bucket, path, maxBytes = 1 << 20) {
-    const r = await this.req('GET', `${this.base}/storage/v1/object/authenticated/${bucket}/${enc(path)}`);
+    const r = await this.req('GET', `${this.base}/storage/v1/object/authenticated/${bucket}/${enc(path)}?t=${Date.now()}`);   // cache-buster: Supabase can serve a stale copy right after an overwrite (seen on the real project)
     if ((await this.eff(r)) === 404) { await r.arrayBuffer(); return null; }
     if (!r.ok) await this.fail(r, `get ${bucket}/${path}`);
     const len = +(r.headers.get('content-length') || 0); if (len > maxBytes) { await r.arrayBuffer().catch(() => {}); throw new HubError('object too large', 0); }

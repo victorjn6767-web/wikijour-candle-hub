@@ -100,3 +100,8 @@ test('candidate is read once per run: a stale re-read cannot drop months publish
   const b2 = Object.assign({}, b, { bytes: Buffer.concat([b.bytes, Buffer.alloc(0)]) }); await p.publishMonth('2026-10', b2); assert.strictEqual(reads, 0, 'no re-read after the first load');
   E.W.get = real; const c = await p.candidate(); assert.ok(c.symbols.XAUUSD.months['2026-10']);
 });
+test('stale copies after an overwrite (real Supabase behaviour) do not break publishing: finalize twice, reader verifies the new pair', async () => {
+  const E = await env(); E.S.stale = true; await E.run(); await finalize({ store: E.W, privatePem: KEYS.privatePem });
+  assert.deepStrictEqual(await finalize({ store: E.W, privatePem: KEYS.privatePem }), { seq: 2 }, 'sequence advances even though a plain GET would return the old manifest');
+  const m = await E.reader().manifest(); assert.strictEqual(m.seq, 2);
+});

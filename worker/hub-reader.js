@@ -26,7 +26,7 @@ async function login(env) {
 }
 async function upstream(env, path, retry = true) {
   if (!session || session.exp < Date.now()) await login(env);
-  const r = await fetch(`${base(env)}/storage/v1/object/authenticated/hub/${path.split('/').map(encodeURIComponent).join('/')}`, { headers: { apikey: env.HUB_ANON_KEY, authorization: 'Bearer ' + session.token } });
+  const r = await fetch(`${base(env)}/storage/v1/object/authenticated/hub/${path.split('/').map(encodeURIComponent).join('/')}?t=${Date.now()}`, { headers: { apikey: env.HUB_ANON_KEY, authorization: 'Bearer ' + session.token } });
   if (r.status === 401 && retry) { session = null; await r.arrayBuffer(); return upstream(env, path, false); }
   return r;
 }
